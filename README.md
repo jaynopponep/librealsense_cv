@@ -8,26 +8,12 @@ sudo apt install -y cmake build-essential libusb-1.0-0-dev libssl-dev libgtk-3-d
 Install and build `librealsense` library from source: </br>
 ```
 git clone https://github.com/IntelRealSense/librealsense.git
-```
-```
 cd librealsense
-```
-```
 mkdir build
-```
-```
 cd build
-```
-```
 cmake .. -DBUILD_SHARED_LIBS=ON
-```
-```
 make -j$(nproc)
-```
-```
 sudo make install
-```
-```
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 ```
 # Compile:
