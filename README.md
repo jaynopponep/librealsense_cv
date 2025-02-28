@@ -3,7 +3,7 @@ I'm running on Linux so the following are the instructions for running:
 # Setting Up
 Make sure the necessary packages are available: </br>
 ```
-sudo apt install -y cmake build-essential libusb-1.0-0-dev libssl-dev libgtk-3-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev
+sudo apt install -y cmake build-essential libusb-1.0-0-dev libssl-dev libgtk-3-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libzmq3.dev
 ```
 Install and build `librealsense` library from source: </br>
 ```
@@ -17,4 +17,4 @@ sudo make install
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 ```
 # Compile:
-```g++ -o camera_stream camera_stream.cpp -I/usr/include/opencv4 -L/usr/local/lib -lrealsense2 $(pkg-config --cflags --libs opencv4)```
+```g++ -o camera_stream camera_stream.cpp -L/usr/local/lib -lrealsense2 -lzmq```
