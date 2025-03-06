@@ -1,6 +1,8 @@
 import zmq
+import os
 import numpy as np
 import cv2
+import time
 from ultralytics import YOLO
 import mediapipe as mp
 
@@ -10,6 +12,9 @@ mp_hands = mp.solutions.hands
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 hands = mp_hands.Hands(static_image_mode=True, min_detection_confidence=0.4, min_tracking_confidence=0.4)
+
+data_screenshots = "collected_data"
+os.makedirs(data_screenshots, exist_ok=True)
 
 labels_dict = {
     0: 'A', 1: 'B', 2: 'C', 3: 'D', 4: 'E', 5: 'F', 6: 'G', 7: 'H', 8: 'I', 9: 'J',
@@ -26,7 +31,7 @@ socket.setsockopt_string(zmq.SUBSCRIBE, "")
 
 width, height = 640, 480
 
-print("Listening for frames... Press 'q' to exit.")
+print("Listening for frames... Press 'q' to exit, 's' for screenshotting")
 while True:
     try:
         while socket.poll(1, zmq.POLLIN):  
@@ -71,7 +76,14 @@ while True:
 
         cv2.imshow("YOLOv8 Hand Sign Detection", frame_np)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            timestamp = time.strftime("%Y%m%d-%H%M%S")  
+            filename = os.path.join(data_screenshots, f"screenshot_{timestamp}.png")
+            cv2.imwrite(filename, frame_np)
+            print(f"Screenshot saved: {filename}")
+
+        if key == ord('q'):
             break
 
     except zmq.Again:
