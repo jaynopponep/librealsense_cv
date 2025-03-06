@@ -20,42 +20,46 @@ labels_dict = {
 
 context = zmq.Context()
 socket = context.socket(zmq.SUB)
-socket.connect("tcp://localhost:5555")
-socket.setsockopt(zmq.SUBSCRIBE, b"")
-width, height = 640, 480  
+socket = context.socket(zmq.SUB)
+socket.connect("tcp://localhost:5555")  
+socket.setsockopt_string(zmq.SUBSCRIBE, "")
+
+width, height = 640, 480
 
 print("Listening for frames... Press 'q' to exit.")
-
 while True:
-    frame_bytes = socket.recv()
-    frame_np = np.frombuffer(frame_bytes, dtype=np.uint8).reshape((height, width, 3)).copy()
+    try:
+        while socket.poll(1, zmq.POLLIN):  
+            frame_bytes = socket.recv(zmq.DONTWAIT)  
 
-    frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_BGR2RGB)
-    results = hands.process(frame_rgb)
+        frame_np = np.frombuffer(frame_bytes, dtype=np.uint8).reshape((height, width, 3)).copy()
 
-    predictions = model.predict(frame_np, conf=0.5)
+        frame_rgb = cv2.cvtColor(frame_np, cv2.COLOR_BGR2RGB)
+        results = hands.process(frame_rgb)
 
-    boxes = predictions[0].boxes
-    for box in boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-        cls = int(box.cls[0])  
-        conf = float(box.conf[0])  
+        predictions = model.predict(frame_np, conf=0.5)
 
-        label = labels_dict.get(cls, f"Class {cls}")
+        boxes = predictions[0].boxes
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            cls = int(box.cls[0])  
+            conf = float(box.conf[0])  
 
-        if results.multi_hand_landmarks:
-            hand_landmarks = results.multi_hand_landmarks[0]
-            x_vals = [landmark.x * frame_np.shape[1] for landmark in hand_landmarks.landmark]
-            y_vals = [landmark.y * frame_np.shape[0] for landmark in hand_landmarks.landmark]
-            x_min, x_max = int(min(x_vals)), int(max(x_vals))
-            y_min, y_max = int(min(y_vals)), int(max(y_vals))
+            label = labels_dict.get(cls, f"Class {cls}")
 
-            pad = 40
-            x1, y1, x2, y2 = max(x_min - pad, 0), max(y_min - pad, 0), min(x_max + pad, width), min(y_max + pad, height)
+            if results.multi_hand_landmarks:
+                hand_landmarks = results.multi_hand_landmarks[0]
+                x_vals = [landmark.x * frame_np.shape[1] for landmark in hand_landmarks.landmark]
+                y_vals = [landmark.y * frame_np.shape[0] for landmark in hand_landmarks.landmark]
+                x_min, x_max = int(min(x_vals)), int(max(x_vals))
+                y_min, y_max = int(min(y_vals)), int(max(y_vals))
 
-        cv2.rectangle(frame_np, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(frame_np, f"{label} ({conf:.2f})", (x1, y1 - 10), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                pad = 40
+                x1, y1, x2, y2 = max(x_min - pad, 0), max(y_min - pad, 0), min(x_max + pad, width), min(y_max + pad, height)
+
+            cv2.rectangle(frame_np, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame_np, f"{label} ({conf:.2f})", (x1, y1 - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
@@ -65,9 +69,15 @@ while True:
                     mp_drawing_styles.get_default_hand_connections_style()
                 )
 
-    cv2.imshow("YOLOv8 Hand Sign Detection", frame_np)
+        cv2.imshow("YOLOv8 Hand Sign Detection", frame_np)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    except zmq.Again:
+        continue
+    except Exception as e:
+        print(f"Error processing frame: {e}")
+        continue
 
 cv2.destroyAllWindows()
