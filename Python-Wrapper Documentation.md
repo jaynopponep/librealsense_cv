@@ -16,3 +16,7 @@ pip install pyglet==1.4.9
 pip install tensorflow
 
 ```
+- [ ] Git Clone the Point Net Repo
+```bash
+git clone https://github.com/charlesq34/pointnet.git
+```
