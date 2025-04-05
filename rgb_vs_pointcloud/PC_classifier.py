@@ -27,8 +27,9 @@ def get_distance(df, a_type, a_index, b_type, b_index):
 
     
 def classifier():
-    BASE_DIR = 'data/asl-signs/'  # data directory containing train.csv
-    train_df = pd.read_csv(f'{BASE_DIR}/train.csv')
+    BASE_DIR = os.path.join('data', 'asl-signs')  # data directory containing train.csv
+    train_csv_path = os.path.join(BASE_DIR, 'train.csv')
+    train_df = pd.read_csv(train_csv_path)
     
     # Create mappings from sign names to ordinal labels and back
     train_df['sign_ord'] = train_df['sign'].astype('category').cat.codes
