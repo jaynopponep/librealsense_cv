@@ -84,19 +84,16 @@ def classifier(): #function to classify the sign language gesture based on the p
     # Ensure the shape is (1, 543, 3) for a single frame
     # (If multiple frames were present, frames.shape[0] would be >1 accordingly.)
     
-    # Initialize TFLite interpreter and get the prediction function
     model_path = "model.tflite"
     interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     prediction_fn = interpreter.get_signature_runner("serving_default")
     
-    # Run inference
     output = prediction_fn(inputs=frames)
     class_idx = int(np.argmax(output["outputs"]))
     predicted_sign = ORD2SIGN.get(class_idx, "<UNK>")
     
     return predicted_sign
 
-# If executed as a script, print the result
 if __name__ == "__main__":
     print(classifier())
