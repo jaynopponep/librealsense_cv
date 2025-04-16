@@ -3,5 +3,4 @@ venv/
 examples/
 pointnet/
 data
-debug.ipynb
 __pycache__/

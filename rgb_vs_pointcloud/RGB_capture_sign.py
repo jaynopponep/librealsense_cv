@@ -1,117 +1,93 @@
 import cv2
 import openpifpaf
 import numpy as np
-import os
 import pandas as pd
-import matplotlib.pyplot as plt
 import time
 
-def create_frame_landmarks(pred, frame, xyz):
-    """
-    Create a DataFrame of landmarks from an OpenPifPaf prediction.
-    Assumes that `xyz` is a mapping DataFrame with at least the columns 'type' and 'landmark_index'
-    for the pose landmarks.
-    """
-    if pred is None:
-        # Create an empty dataframe if no prediction is available.
-        landmarks = pd.DataFrame(columns=['type', 'landmark_index', 'x', 'y', 'z', 'frame'])
-        return landmarks
+POSE_KPTS = list(range(0, 17))
+FACE_KPTS = list(range(17, 85))
+LEFT_HAND_KPTS = list(range(85, 106))
+RIGHT_HAND_KPTS = list(range(106, 127))
 
-    # Create a DataFrame from the prediction.
-    # OpenPifPaf returns keypoints as an array of [x, y, score] values.
-    pose = pd.DataFrame(pred.data, columns=['x', 'y', 'score'])
-    pose['landmark_index'] = pose.index
-    pose['type'] = 'pose'
-    # OpenPifPaf does not output a z coordinate, so we set it to NaN.
-    pose['z'] = np.nan
+predictor = openpifpaf.Predictor(checkpoint='resnet101-wholebody') # pre-trained model for whole body pose estimation
 
-    # Assume that your mapping file (xyz) includes the keypoints for pose only.
-    xyz_skel = (
-        xyz[xyz['type'] == 'pose'][['type', 'landmark_index']]
-        .drop_duplicates()
-        .reset_index(drop=True)
-    )
+'''
+model alteratives:
+predictor = openpifpaf.Predictor(checkpoint='resnet50')
+predictor = openpifpaf.Predictor(checkpoint='resnet101')
+predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30')
+predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16')
+predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16-wholebody')
+predictor = openpifpaf.Predictor(checkpoint='resnet50-wholebody')
+predictor = openpifpaf.Predictor(checkpoint='resnet101-wholebody')
 
-    landmarks = pd.merge(xyz_skel, pose, on=['type', 'landmark_index'], how='left')
-    landmarks['frame'] = frame
-    return landmarks
+predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30-wholebody')
 
-def capture(xyz):
-    """
-    Capture video frames from the webcam, run OpenPifPaf inference,
-    draw the detected pose on the image, and record landmarks.
-    """
-    all_landmarks = []
-    cap = cv2.VideoCapture(0)
-    # Initialize the OpenPifPaf predictor.
-    predictor = openpifpaf.Predictor(checkpoint='resnet50')
-    frame = 0
-    start_time = time.time()
+'''
+cap = cv2.VideoCapture(0) #using the default camera (0) for capturing video, change the index for diff cameras
+start_time = time.time() #start the timer for 10 seconds
+landmark_rows = [] #list to store landmark data
+frame_num = 0
 
-    while cap.isOpened():
-        frame += 1
-        success, image = cap.read()
-        if not success:
-            print("Ignoring empty camera frame.")
-            continue
+while True:
+    ret, frame = cap.read() #read a frame from the camera
+    if not ret: #if frame not captured, continue to the next iteration
+        continue
+    frame_num += 1 #increment the frame number
 
-        # Flip the image horizontally for a mirror view.
-        image = cv2.flip(image, 1)
-        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    frame = cv2.flip(frame, 1) #flip the frame horizontally for better visualization
+    # resize image to lower resolution to ease processing
+    frame = cv2.resize(frame, (640, 480)) 
+    image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #convert to RGB format for openpifpaf to be able to plot
+    
+    try: #predict keypoints using openpifpaf
+        predictions, _, _ = predictor.numpy_image(image_rgb)
+    except Exception as e: #catch any exception during prediction
+        print("Error during predictor call:", e)
+        continue
 
-        # Run OpenPifPaf inference.
-        predictions, _, _ = predictor.numpy_image(rgb_image)
-        # For simplicity, use only the first detected person (if any).
-        pred = predictions[0] if predictions else None
+    if predictions:
+        keypoints = predictions[0].data
+        for i, (x, y, conf) in enumerate(keypoints):
+            if conf < 0.05:
+                continue
+            h, w, _ = frame.shape
+            x_norm = x / w
+            y_norm = y / h
+            if i in POSE_KPTS:
+                typ = 'pose'
+                idx = i
+            elif i in FACE_KPTS:
+                typ = 'face'
+                idx = i - 17
+            elif i in LEFT_HAND_KPTS:
+                typ = 'left_hand'
+                idx = i - 85
+            elif i in RIGHT_HAND_KPTS:
+                typ = 'right_hand'
+                idx = i - 106
+            else:
+                typ = 'other'
+                idx = i
+            landmark_rows.append({
+                'type': typ,
+                'landmark_index': idx,
+                'x': x_norm,
+                'y': y_norm,
+                'z': 0.0,
+                'frame': frame_num
+            })
+            if conf > 0.5:
+                cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 0), -1)
+    
+    cv2.imshow("OpenPifPaf 2D Capture", frame)
+    if cv2.waitKey(1) & 0xFF == ord('q') or (time.time() - start_time > 10):
+        break
 
-        landmarks = create_frame_landmarks(pred, frame, xyz)
-        all_landmarks.append(landmarks)
+cap.release()
+cv2.destroyAllWindows()
 
-        # Draw keypoints and skeleton on the image if a prediction exists.
-        if pred is not None:
-            keypoints = pred.data  # shape (N, 3) with columns [x, y, score]
-            # Draw each keypoint if confidence is above a threshold.
-            for kp in keypoints:
-                x, y, conf = kp
-                if conf > 0.5:
-                    cv2.circle(image, (int(x), int(y)), 3, (0, 255, 0), -1)
-
-            # Define a skeleton (for the COCO keypoints order used by OpenPifPaf).
-            skeleton = [
-                (0, 1), (0, 2), (1, 3), (2, 4),
-                (0, 5), (0, 6), (5, 7), (7, 9),
-                (6, 8), (8, 10), (5, 6), (5, 11),
-                (6, 12), (11, 12), (11, 13), (13, 15),
-                (12, 14), (14, 16)
-            ]
-            for connection in skeleton:
-                i, j = connection
-                if i < len(keypoints) and j < len(keypoints):
-                    x1, y1, conf1 = keypoints[i]
-                    x2, y2, conf2 = keypoints[j]
-                    if conf1 > 0.5 and conf2 > 0.5:
-                        cv2.line(image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
-
-        cv2.imshow('OpenPifPaf Pose Estimation', image)
-        if cv2.waitKey(5) & 0xFF == ord('q'):
-            break
-        elif time.time() - start_time > 8:
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
-    return all_landmarks
-
-def capture_sign():
-    BASE_DIR = 'data/asl-signs/'
-    train = pd.read_csv(f'{BASE_DIR}/train.csv')
-    # Load the mapping file that contains the landmark indices and types.
-    xyz = pd.read_parquet(f'{BASE_DIR}/train_landmark_files/16069/695046.parquet')
-    all_landmarks = capture(xyz)
-    all_landmarks = pd.concat(all_landmarks).reset_index(drop=True)
-    all_landmarks.to_parquet('landmarks.parquet')
-    return
-
-if __name__ == "__main__":
-    capture_sign()
-    print('Landmarks saved')
+if landmark_rows:
+    landmarks_df = pd.DataFrame(landmark_rows)
+    landmarks_df.to_parquet("2d_landmarks.parquet", index=False)
+    print("Saved 2D landmark data to landmarks.parquet")
