@@ -31,7 +31,6 @@ def classifier():
     train_csv_path = os.path.join(BASE_DIR, 'train.csv')
     train_df = pd.read_csv(train_csv_path)
     
-    # Create mappings from sign names to ordinal labels and back
     train_df['sign_ord'] = train_df['sign'].astype('category').cat.codes
     SIGN2ORD = dict(zip(train_df['sign'], train_df['sign_ord']))
     ORD2SIGN = dict(zip(train_df['sign_ord'], train_df['sign']))
@@ -47,10 +46,8 @@ def classifier():
             # Fallback for legacy files
             data = pd.read_parquet(pq_path)
 
-        # Keep only relevant landmark types
         data = data[data['type'].isin(['pose', 'left_hand', 'right_hand', 'face'])]
 
-        # Consistent ordering: first by type, then landmark_index
         type_order = {'pose': 0, 'left_hand': 1, 'right_hand': 2, 'face': 3}
         data['type_order'] = data['type'].map(type_order)
         data = data.sort_values(['frame', 'type_order', 'landmark_index'])
@@ -78,25 +75,21 @@ def classifier():
         return np.array(frames_array, dtype=np.float32)
 
     
-    # Load the point cloud data and prepare input tensor
     pq_path = 'labeled_point_cloud.parquet'
     frames = load_relevant_data_subset(pq_path)
     # Ensure the shape is (1, 543, 3) for a single frame
     # (If multiple frames were present, frames.shape[0] would be >1 accordingly.)
     
-    # Initialize TFLite interpreter and get the prediction function
     model_path = "model.tflite"
     interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     prediction_fn = interpreter.get_signature_runner("serving_default")
     
-    # Run inference
     output = prediction_fn(inputs=frames)
     class_idx = int(np.argmax(output["outputs"]))
     predicted_sign = ORD2SIGN.get(class_idx, "<UNK>")
     
     return predicted_sign
 
-# If executed as a script, print the result
 if __name__ == "__main__":
     print(classifier())

@@ -12,22 +12,17 @@ def classifier():
 
 
     def run_model(model_path, frames): #classifier itself
-        # Initialize the TensorFlow Lite interpreter
         interpreter = tf.lite.Interpreter(model_path=model_path)
         interpreter.allocate_tensors()
 
-        # Get the list of available signatures
         found_signatures = list(interpreter.get_signature_list().keys())
         REQUIRED_SIGNATURE = "serving_default"
 
-        # Check if the required signature is available
         if REQUIRED_SIGNATURE not in found_signatures:
             raise Exception('Required input signature not found.')
 
-        # Get the prediction function from the interpreter
         prediction_fn = interpreter.get_signature_runner(REQUIRED_SIGNATURE)
 
-        # Run the prediction function with the input frames
         output = prediction_fn(inputs=frames)
         sign = np.argmax(output["outputs"])
 
