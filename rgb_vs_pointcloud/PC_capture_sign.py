@@ -113,7 +113,7 @@ while True:
 pipeline.stop() 
 cv2.destroyAllWindows()
 
-#if a depth frame was captured, processs it into a point cloud
+#if a depth frame was captured, process it into a point cloud
 if depth_frame:
     pc = rs.pointcloud()
     points = pc.calculate(depth_frame)  #calculate point cloud from depth frame

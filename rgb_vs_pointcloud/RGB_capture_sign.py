@@ -1,57 +1,47 @@
 import cv2
-import openpifpaf
 import numpy as np
 import pandas as pd
 import time
+from mmpose.apis import MMPoseInferencer
 
+# four key points
 POSE_KPTS = list(range(0, 17))
 FACE_KPTS = list(range(17, 85))
 LEFT_HAND_KPTS = list(range(85, 106))
 RIGHT_HAND_KPTS = list(range(106, 127))
 
-predictor = openpifpaf.Predictor(checkpoint='resnet101-wholebody') # pre-trained model for whole body pose estimation
+# MMPose inference model here ->
+inferencer = MMPoseInferencer(
+    pose2d='configs/wholebody/2d_kpt_sview_rgb_img/topdown_heatmap/coco-wholebody/vipnas_mbv3_coco_wholebody_256x192_dark.py',
+    pose2d_weights='https://download.openmmlab.com/mmpose/top_down/vipnas/vipnas_mbv3_coco_wholebody_256x192_dark-e2158108_20211205.pth',
+    det_model='human'
+)
 
-'''
-model alteratives:
-predictor = openpifpaf.Predictor(checkpoint='resnet50')
-predictor = openpifpaf.Predictor(checkpoint='resnet101')
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30')
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16')
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16-wholebody')
-predictor = openpifpaf.Predictor(checkpoint='resnet50-wholebody')
-predictor = openpifpaf.Predictor(checkpoint='resnet101-wholebody')
-
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30-wholebody')
-
-'''
-cap = cv2.VideoCapture(0) #using the default camera (0) for capturing video, change the index for diff cameras
-start_time = time.time() #start the timer for 10 seconds
-landmark_rows = [] #list to store landmark data
+cap = cv2.VideoCapture(0)
+start_time = time.time()
+landmark_rows = []
 frame_num = 0
 
 while True:
-    ret, frame = cap.read() #read a frame from the camera
-    if not ret: #if frame not captured, continue to the next iteration
+    ret, frame = cap.read()
+    if not ret:
         continue
-    frame_num += 1 #increment the frame number
+    frame_num += 1
 
-    frame = cv2.flip(frame, 1) #flip the frame horizontally for better visualization
-    # resize image to lower resolution to ease processing
-    frame = cv2.resize(frame, (640, 480)) 
-    image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #convert to RGB format for openpifpaf to be able to plot
-    
-    try: #predict keypoints using openpifpaf
-        predictions, _, _ = predictor.numpy_image(image_rgb)
-    except Exception as e: #catch any exception during prediction
-        print("Error during predictor call:", e)
-        continue
+    frame = cv2.flip(frame, 1)
+    frame_resized = cv2.resize(frame, (640, 480))
+    image_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 
-    if predictions:
-        keypoints = predictions[0].data
+    # perform the inferencing, collecting landmarks
+    result_generator = inferencer(image_rgb)
+    result = next(result_generator)
+
+    if result and 'predictions' in result and result['predictions']:
+        keypoints = result['predictions'][0]['keypoints']
         for i, (x, y, conf) in enumerate(keypoints):
             if conf < 0.05:
                 continue
-            h, w, _ = frame.shape
+            h, w, _ = frame_resized.shape
             x_norm = x / w
             y_norm = y / h
             if i in POSE_KPTS:
@@ -78,9 +68,9 @@ while True:
                 'frame': frame_num
             })
             if conf > 0.5:
-                cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 0), -1)
-    
-    cv2.imshow("OpenPifPaf 2D Capture", frame)
+                cv2.circle(frame_resized, (int(x), int(y)), 3, (0, 255, 0), -1)
+
+    cv2.imshow("MMPose 2D Capture", frame_resized)
     if cv2.waitKey(1) & 0xFF == ord('q') or (time.time() - start_time > 10):
         break
 
@@ -90,4 +80,4 @@ cv2.destroyAllWindows()
 if landmark_rows:
     landmarks_df = pd.DataFrame(landmark_rows)
     landmarks_df.to_parquet("2d_landmarks.parquet", index=False)
-    print("Saved 2D landmark data to landmarks.parquet")
+    print("Saved 2D landmark data to 2d_landmarks.parquet")
