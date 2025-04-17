@@ -1,93 +1,108 @@
 import cv2
-import openpifpaf
-import numpy as np
+import mediapipe as mp
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+mp_holistic = mp.solutions.holistic
 import pandas as pd
 import time
-
-POSE_KPTS = list(range(0, 17))
-FACE_KPTS = list(range(17, 85))
-LEFT_HAND_KPTS = list(range(85, 106))
-RIGHT_HAND_KPTS = list(range(106, 127))
-
-predictor = openpifpaf.Predictor(checkpoint='resnet101-wholebody') # pre-trained model for whole body pose estimation
+import os
 
 '''
-model alteratives:
-predictor = openpifpaf.Predictor(checkpoint='resnet50')
-predictor = openpifpaf.Predictor(checkpoint='resnet101')
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30')
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16')
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16-wholebody')
-predictor = openpifpaf.Predictor(checkpoint='resnet50-wholebody')
-predictor = openpifpaf.Predictor(checkpoint='resnet101-wholebody')
-
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30-wholebody')
+IMPORTANT NOTICE:
+this code does NOT run on the same python version as the pointcloud capture. intel realsense requires that the python version be
+3.7 or lower, but mediapipe only works on 3.9+. the rgb capture/classification uses python 3.12 to take advantage of mediapipe holistic to get z coordinates.
+the pointcloud capture/classification uses python 3.7 to take advantage of the intel realsense camera and open3d for point cloud processing.
+the goal of the project is to see the comparison of pointcloud data vs mediapipe's z coordinates for sign language classification.
 
 '''
-cap = cv2.VideoCapture(0) #using the default camera (0) for capturing video, change the index for diff cameras
-start_time = time.time() #start the timer for 10 seconds
-landmark_rows = [] #list to store landmark data
-frame_num = 0
+def create_frame_landmarks(results,frame, xyz): # function to create a dataframe of landmarks for each frame
 
-while True:
-    ret, frame = cap.read() #read a frame from the camera
-    if not ret: #if frame not captured, continue to the next iteration
-        continue
-    frame_num += 1 #increment the frame number
-
-    frame = cv2.flip(frame, 1) #flip the frame horizontally for better visualization
-    # resize image to lower resolution to ease processing
-    frame = cv2.resize(frame, (640, 480)) 
-    image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) #convert to RGB format for openpifpaf to be able to plot
+    xyz_skel=xyz[['type','landmark_index']].drop_duplicates().reset_index(drop=True).copy()
     
-    try: #predict keypoints using openpifpaf
-        predictions, _, _ = predictor.numpy_image(image_rgb)
-    except Exception as e: #catch any exception during prediction
-        print("Error during predictor call:", e)
-        continue
+    face=pd.DataFrame()#creating 4dataframes for each of the landmarks
+    pose=pd.DataFrame()
+    left_hand=pd.DataFrame()
+    right_hand=pd.DataFrame()
+    if results.face_landmarks: #face landmarks
+        for i,point in enumerate(results.face_landmarks.landmark):
+            face.loc[i,['x','y','z']]=[point.x,point.y,point.z]
+    if results.pose_landmarks: #pose landmarks
+        for i,point in enumerate(results.pose_landmarks.landmark):
+            pose.loc[i,['x','y','z']]=[point.x,point.y,point.z]
+    if results.left_hand_landmarks: #left hand landmarks
+        for i,point in enumerate(results.left_hand_landmarks.landmark):
+            left_hand.loc[i,['x','y','z']]=[point.x,point.y,point.z]   
+    if results.right_hand_landmarks: ##right hand landmarks
+        for i,point in enumerate(results.right_hand_landmarks.landmark):
+            right_hand.loc[i,['x','y','z']]=[point.x,point.y,point.z]
+    face=face.reset_index().rename(columns={'index':'landmark_index'}).assign(type='face') #resetting the index and renaming the columns
+    pose=pose.reset_index().rename(columns={'index':'landmark_index'}).assign(type='pose')
+    left_hand=left_hand.reset_index().rename(columns={'index':'landmark_index'}).assign(type='left_hand')
+    right_hand=right_hand.reset_index().rename(columns={'index':'landmark_index'}).assign(type='right_hand')
+    landmarks=pd.concat([face,pose,left_hand,right_hand]).reset_index(drop=True) #concatenating the dataframes
+    #print(landmarks.columns,xyz_skel.columns)
+    landmarks=xyz_skel.merge(landmarks,how='left',on=['type','landmark_index']) #left merging the dataframes to get the x,y,z coordinates
+    landmarks=landmarks.assign(frame=frame) ##assigning the frame number to the dataframe
+    return landmarks
 
-    if predictions:
-        keypoints = predictions[0].data
-        for i, (x, y, conf) in enumerate(keypoints):
-            if conf < 0.05:
+
+def capture(xyz): #opencv capture function to capture the video and landmarks
+    all_landmarks=[]
+
+    cap=cv2.VideoCapture(0)
+    with mp_holistic.Holistic(min_detection_confidence=0.5,min_tracking_confidence=0.5) as holistic: #using holistic model for pose detection
+        frame=0
+        start_time = time.time()
+        while cap.isOpened():
+            frame+=1
+            success, image = cap.read()
+            if not success:
+                print("Ignoring empty camera frame.")
                 continue
-            h, w, _ = frame.shape
-            x_norm = x / w
-            y_norm = y / h
-            if i in POSE_KPTS:
-                typ = 'pose'
-                idx = i
-            elif i in FACE_KPTS:
-                typ = 'face'
-                idx = i - 17
-            elif i in LEFT_HAND_KPTS:
-                typ = 'left_hand'
-                idx = i - 85
-            elif i in RIGHT_HAND_KPTS:
-                typ = 'right_hand'
-                idx = i - 106
-            else:
-                typ = 'other'
-                idx = i
-            landmark_rows.append({
-                'type': typ,
-                'landmark_index': idx,
-                'x': x_norm,
-                'y': y_norm,
-                'z': 0.0,
-                'frame': frame_num
-            })
-            if conf > 0.5:
-                cv2.circle(frame, (int(x), int(y)), 3, (0, 255, 0), -1)
-    
-    cv2.imshow("OpenPifPaf 2D Capture", frame)
-    if cv2.waitKey(1) & 0xFF == ord('q') or (time.time() - start_time > 10):
-        break
+            image.flags.writeable = False
+            image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)         
+            results = holistic.process(image) #process the image using holistic model
 
-cap.release()
-cv2.destroyAllWindows()
+            landmarks=create_frame_landmarks(results,frame,xyz) #using our previously defined helper to create the landmarks dataframe
+            all_landmarks.append(landmarks) ##appending the landmarks to the list
 
-if landmark_rows:
-    landmarks_df = pd.DataFrame(landmark_rows)
-    landmarks_df.to_parquet("2d_landmarks.parquet", index=False)
-    print("Saved 2D landmark data to landmarks.parquet")
+
+            image.flags.writeable = True
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+            mp_drawing.draw_landmarks( #now we draw the landmarks on the image using mediapipe drawing utils
+                image, 
+                results.face_landmarks,  
+                mp_holistic.FACEMESH_CONTOURS, #face landmarks
+                landmark_drawing_spec=None, 
+                connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
+            mp_drawing.draw_landmarks(
+                image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+            
+            mp_drawing.draw_landmarks(
+                image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+            mp_drawing.draw_landmarks(
+                image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+            cv2.imshow('MediaPipe Holistic', image) #show the image with landmarks
+            if cv2.waitKey(5) & 0xFF == ord('q'):
+                break
+            elif time.time() - start_time > 8:
+                break   
+        cap.release()
+        cv2.destroyAllWindows()
+    return all_landmarks
+def capture_sign(): #function to store the landmarks in a parquet file
+    BASE_DIR = os.path.join(os.getcwd(), 'data', 'asl-signs') #data directory
+    train = pd.read_csv(f'{BASE_DIR}/train.csv')
+    xyz=pd.read_parquet(f'{BASE_DIR}/train_landmark_files/16069/695046.parquet') #loading a sample landmark file to intialize the dataframe with the right shape
+    all_landmarks=capture(xyz) #calling the capture function to get the landmarks
+    all_landmarks=pd.concat(all_landmarks).reset_index(drop=True) ##concatenating the landmarks to make a single dataframe
+    all_landmarks.to_parquet('2d_landmarks.parquet')
+    return
+
+if __name__ == "__main__": #main function to test these scripts in isolation
+    capture_sign()
+    print('Landmarks saved') #saved! 
+
+
+

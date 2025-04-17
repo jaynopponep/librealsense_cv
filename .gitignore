@@ -1,5 +1,6 @@
 venv/
 .venv
+.venv2/
 examples/
 pointnet/
 data
