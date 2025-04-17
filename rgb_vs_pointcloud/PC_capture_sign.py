@@ -4,18 +4,18 @@ import cv2
 import pandas as pd
 import open3d as o3d
 import time
-import openpifpaf #python 3.7 alteranative for mediapipe
+import openpifpaf  # python 3.7 alternative for MediaPipe
 import os
 from scipy.spatial import cKDTree
 
+#define keypoint indices for different body parts
+POSE_KPTS = list(range(0, 17))
+FOOT_KPTS= list(range(17, 23))  #feet (indices 17–22), shouldnt really be used/seen
+FACE_KPTS = list(range(23, 91))  #face is 23–90 (68 pts)
+LEFT_HAND_KPTS= list(range(91, 112)) #left hand is 91–111 (21 pts)
+RIGHT_HAND_KPTS = list(range(112, 133)) #right hand is 112–132 (21 pts)
 
-POSE_KPTS = list(range(0, 17)) #define keypoint indices for different body parts
-FACE_KPTS = list(range(17, 85))
-LEFT_HAND_KPTS = list(range(85, 106))
-RIGHT_HAND_KPTS = list(range(106, 127))
-
-#predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16-wholebody') 
-predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30-wholebody')
+predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k16-wholebody')
 
 '''
 model alteratives:
@@ -90,13 +90,13 @@ while True:
                 idx = i
             elif i in FACE_KPTS:  #check if the keypoint is a face keypoint
                 typ = 'face'
-                idx = i - 17 #subtract 17 to get the index for face keypoints
+                idx = i - 23 #subtract 23 to get the index for face keypoints
             elif i in LEFT_HAND_KPTS: #check if the keypoint is a left hand keypoint
                 typ = 'left_hand'
-                idx = i - 85 #subtract 85 to get the index for left hand keypoints
+                idx = i - 91 #subtract 91 to get the index for left hand keypoints
             elif i in RIGHT_HAND_KPTS: #check if the keypoint is a right hand keypoint
                 typ = 'right_hand'
-                idx = i - 106 #subtract 106 to get the index for right hand keypoints
+                idx = i - 112 #subtract 112 to get the index for right hand keypoints
             else: #if the keypoint is not in any of the above categories
                 typ = 'other' ##assign the type as other
                 idx = i
@@ -157,15 +157,17 @@ if depth_frame:
     labeled_df['type_id'] = type_ids
     labeled_df = labeled_df.dropna(subset=['type_id'])
 
-    labeled_df.to_parquet("labeled_point_cloud.parquet", index=False)
-    print("Saved labeled point cloud to labeled_point_cloud.parquet")
+    labeled_df.to_parquet("3d_landmarks.parquet", index=False)
+    print("Saved labeled point cloud to 3d_landmarks.parquet")
 
 
     #open3d stuff to view the saved point cloud
+    
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points_np) #convert to open3d point cloud
-    o3d.io.write_point_cloud("output.pcd", pcd) #save to pcd
+    #o3d.io.write_point_cloud("output.pcd", pcd) #save to pcd
     o3d.visualization.draw_geometries([pcd])
+    
 else:
     print("No depth frame captured. Exiting.")
     exit(1)
