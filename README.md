@@ -1,20 +1,69 @@
-# Playing around with Intel RealSense D455 for researching CUDA acceleration with Computer Vision
-I'm running on Linux so the following are the instructions for running:
-# Setting Up
-Make sure the necessary packages are available: </br>
+## Installation Instruction
+- [ ] Install python 3.7.2  **MUST BE 64 BIT VERSION NOT 32**
 ```
-sudo apt install -y cmake build-essential libusb-1.0-0-dev libssl-dev libgtk-3-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev libzmq3.dev
+https://www.python.org/downloads/release/python-372/
 ```
-Install and build `librealsense` library from source: </br>
+- [ ] Create a 3.7.2 venv
+```bash
+py -3.7 -m venv .venv
+.venv/Scripts/activate
 ```
-git clone https://github.com/IntelRealSense/librealsense.git
-cd librealsense
-mkdir build
-cd build
-cmake .. -DBUILD_SHARED_LIBS=ON
-make -j$(nproc)
-sudo make install
-export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+or on Linux and mac:
+```bash
+source .venv/Scripts/activate
 ```
-# Compile:
-```g++ -o camera_stream camera_stream.cpp -L/usr/local/lib -lrealsense2 -lzmq```
+
+- [ ] Pip install libraries
+```bash
+pip install pyrealsense2
+python -m pip install --upgrade pip
+pip install numpy opencv-python pandas open3d tensorflow pyarrow pyglet==1.4.9
+pip install "urllib3<2"
+```
+
+- [ ] Be sure to CD into the rgb vs pointcloud directory
+```bash 
+cd rgb_vs_pointcloud
+```
+
+## Running the RGB Model
+
+- [ ] Create a new venv for python 3.9+
+```bash
+py -3.12 venv .venv2
+.venv2/Scripts/activate
+```
+or on mac/linux
+```bash
+source .venv/Scripts/activate
+```
+- [ ] Pip install requirements
+```bash
+pip install requirements3-12.txt
+```
+- [ ] You can also use both in the streamlit file
+```bash
+streamlit run RGB_streamlit.py
+```
+
+
+## Running the Lidar/Pointcloud Model
+- [ ] First run the PC_capture_sign.py file
+```bash
+py PC_capture_sign.py
+```
+You should see a map open. This is the pointcloud captured from the lidar camera, converted into a collection of np arrays. It is rendered in Open3D for 3-D viewing
+- [ ] Now run the PC_classifier.py file
+```bash
+py PC_classifier.py
+```
+This will run the Kaggle model against the captured pointclouds, recently turned into collection of np arrays. 
+
+- [ ] Run the PointCloud Streamlit. Do note you must specify a different port for this streamlit to be running at the same time as the RGB streamlit
+```bash
+streamlit run PC_streamlit.py --server.port 8502
+```
+
+
+
+
