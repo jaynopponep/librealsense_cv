@@ -20,23 +20,6 @@ python -m pip install --upgrade pip
 pip install numpy opencv-python pandas open3d tensorflow pyarrow pyglet==1.4.9
 pip install "urllib3<2"
 ```
-
-## Running the Lidar/Pointcloud Model
-- [ ] First run the PC_capture_sign.py file
-```bash
-py PC_capture_sign.py
-```
-You should see a map open. This is the pointcloud captured from the lidar camera, converted into a collection of np arrays. It is rendered in Open3D for 3-D viewing
-- [ ] Now run the PC_classifier.py file
-```bash
-py PC_classifier.py
-```
-This will run the Kaggle model against the captured pointclouds, recently turned into collection of np arrays. 
-
-- [ ] You can also view both in the streamlit file
-```bash
-py PC_streamlit.py
-```
 ## Running the RGB Model
 
 - [ ] Create a new venv for python 3.9+
@@ -52,7 +35,29 @@ source .venv/Scripts/activate
 ```bash
 pip install requirements3-12.txt
 ```
-- [ ] Run the RGB Streamlit
+- [ ] You can also use both in the streamlit file
 ```bash
-py RGB_streamlit.py
+streamlit run RGB_streamlit.py
 ```
+
+
+## Running the Lidar/Pointcloud Model
+- [ ] First run the PC_capture_sign.py file
+```bash
+py PC_capture_sign.py
+```
+You should see a map open. This is the pointcloud captured from the lidar camera, converted into a collection of np arrays. It is rendered in Open3D for 3-D viewing
+- [ ] Now run the PC_classifier.py file
+```bash
+py PC_classifier.py
+```
+This will run the Kaggle model against the captured pointclouds, recently turned into collection of np arrays. 
+
+- [ ] Run the PointCloud Streamlit. Do note you must specify a different port for this streamlit to be running at the same time as the RGB streamlit
+```bash
+streamlit run PC_streamlit.py --server.port 8502
+```
+
+
+
+
