@@ -1,0 +1,83 @@
+Namespace(gpu=0, model='pointnet_cls', log_dir='log', num_point=1024, max_epoch=20, batch_size=32, learning_rate=0.001, momentum=0.9, optimizer='adam', decay_step=200000, decay_rate=0.7)
+**** EPOCH 000 ****
+mean loss: 4.330470
+accuracy: 0.000000
+No test samples evaluated
+Model saved in file: log/model.ckpt
+**** EPOCH 001 ****
+mean loss: 4.672941
+accuracy: 0.062500
+No test samples evaluated
+**** EPOCH 002 ****
+mean loss: 5.574887
+accuracy: 0.062500
+No test samples evaluated
+**** EPOCH 003 ****
+mean loss: 5.202629
+accuracy: 0.062500
+No test samples evaluated
+**** EPOCH 004 ****
+mean loss: 4.824056
+accuracy: 0.093750
+No test samples evaluated
+**** EPOCH 005 ****
+mean loss: 4.295081
+accuracy: 0.062500
+No test samples evaluated
+**** EPOCH 006 ****
+mean loss: 3.756246
+accuracy: 0.218750
+No test samples evaluated
+**** EPOCH 007 ****
+mean loss: 3.189535
+accuracy: 0.312500
+No test samples evaluated
+**** EPOCH 008 ****
+mean loss: 3.485742
+accuracy: 0.312500
+No test samples evaluated
+**** EPOCH 009 ****
+mean loss: 3.014578
+accuracy: 0.406250
+No test samples evaluated
+**** EPOCH 010 ****
+mean loss: 3.030624
+accuracy: 0.375000
+No test samples evaluated
+Model saved in file: log/model.ckpt
+**** EPOCH 011 ****
+mean loss: 2.885142
+accuracy: 0.531250
+No test samples evaluated
+**** EPOCH 012 ****
+mean loss: 2.720297
+accuracy: 0.656250
+No test samples evaluated
+**** EPOCH 013 ****
+mean loss: 2.541481
+accuracy: 0.750000
+No test samples evaluated
+**** EPOCH 014 ****
+mean loss: 2.391870
+accuracy: 0.656250
+No test samples evaluated
+**** EPOCH 015 ****
+mean loss: 2.119909
+accuracy: 0.750000
+No test samples evaluated
+**** EPOCH 016 ****
+mean loss: 2.029371
+accuracy: 0.843750
+No test samples evaluated
+**** EPOCH 017 ****
+mean loss: 1.625038
+accuracy: 0.937500
+No test samples evaluated
+**** EPOCH 018 ****
+mean loss: 1.377869
+accuracy: 0.968750
+No test samples evaluated
+**** EPOCH 019 ****
+mean loss: 1.459222
+accuracy: 0.906250
+No test samples evaluated
