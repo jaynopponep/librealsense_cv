@@ -15,10 +15,7 @@ source .venv/Scripts/activate
 
 - [ ] Pip install libraries
 ```bash
-pip install pyrealsense2
-python -m pip install --upgrade pip
-pip install numpy opencv-python pandas open3d tensorflow pyarrow pyglet==1.4.9
-pip install "urllib3<2"
+pip install -r requirements.txt
 ```
 
 - [ ] Be sure to CD into the rgb vs pointcloud directory
@@ -27,26 +24,19 @@ cd rgb_vs_pointcloud
 ```
 
 ## Running the RGB Model
-
-- [ ] Create a new venv for python 3.9+
+- [ ] First run the RGB_capture_sign.py file
 ```bash
-py -3.12 venv .venv2
-.venv2/Scripts/activate
+py RGB_capture_sign.py
 ```
-or on mac/linux
+You should see a map open. This is the pointcloud captured from the lidar camera, converted into a collection of np arrays. It is rendered in Open3D for 3-D viewing
+- [ ] Now run the PC_classifier.py file
 ```bash
-source .venv/Scripts/activate
+py PC_classifier.py
 ```
-- [ ] Pip install requirements
+- [ ] To run and see both models at the same time, run the following:
 ```bash
-pip install requirements3-12.txt
+py RGB_streamlit.py
 ```
-- [ ] You can also use both in the streamlit file
-```bash
-streamlit run RGB_streamlit.py
-```
-
-
 ## Running the Lidar/Pointcloud Model
 - [ ] First run the PC_capture_sign.py file
 ```bash

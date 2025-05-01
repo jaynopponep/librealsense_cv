@@ -1,181 +1,166 @@
-def pc_capture_sign():
-    import time
-    import cv2
-    import numpy as np
-    import pyrealsense2 as rs
-    import openpifpaf  # python 3.7 alternative for MediaPipe
-    import torch
-    import open3d as o3d
-    import pandas as pd
+import cv2
+import mediapipe as mp
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+mp_holistic = mp.solutions.holistic
+import pandas as pd
+import time
+import os
+import pyrealsense2 as rs
+import numpy as np
+import open3d as o3d   # <-- added for point-cloud visualisation
 
-    torch.backends.cudnn.benchmark = True
+#stream init
+#realsense setup
+pipeline = rs.pipeline()
+config = rs.config()
+config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30) 
+config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+profile = pipeline.start(config) #start streaming depth + color
+align   = rs.align(rs.stream.color) #align depth to color stream
 
-    #define keypoint indices for different body parts
-    POSE_KPTS       = list(range(0, 17))
-    FOOT_KPTS       = list(range(17, 23))    #for our use case, should not be visible. keeping this rendered for completeness in range
-    FACE_KPTS       = list(range(23, 91))
-    LEFT_HAND_KPTS  = list(range(91, 112))
-    RIGHT_HAND_KPTS = list(range(112, 133))
+# get intrinsics
+color_stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
+intrinsics   = color_stream.get_intrinsics()
 
-    #load whole‑body model
-    predictor = openpifpaf.Predictor(checkpoint='shufflenetv2k30-wholebody') #using wholebody model for hand and face keypoints
+def create_frame_landmarks(results,frame, xyz, depth_frame): # function to create a dataframe of landmarks for each frame
 
-    #realsense setup
-    pipeline = rs.pipeline()
-    config   = rs.config()
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30) 
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    profile  = pipeline.start(config) #start streaming depth + color
-    align    = rs.align(rs.stream.color) #align depth to color stream
+    xyz_skel=xyz[['type','landmark_index']].drop_duplicates().reset_index(drop=True).copy()
+    
+    face=pd.DataFrame()#creating 4dataframes for each of the landmarks
+    pose=pd.DataFrame()
+    left_hand=pd.DataFrame()
+    right_hand=pd.DataFrame()
 
-    # get depth intrinsics
-    #this allows us to deproject pixel (x,y) + depth → real‑world (X,Y,Z) 
-    color_stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
-    intrinsics   = color_stream.get_intrinsics()
-    depth_sensor = profile.get_device().first_depth_sensor()
-    depth_scale  = depth_sensor.get_depth_scale()
+    w, h = intrinsics.width, intrinsics.height  # >>> NEW keep width/height handy
 
-    print("Streaming depth & color. Press 'q' to quit or wait 30 seconds…")
+    # >>> NEW helper with bounds-check so we never call RealSense on invalid pixels
+    def _real_z(px, py):
+        if px < 0 or px >= w or py < 0 or py >= h:
+            return np.nan                     # outside frame → give NaN
+        d = depth_frame.get_distance(int(px), int(py))
+        if d == 0:
+            return np.nan                     # no depth → give NaN
+        return rs.rs2_deproject_pixel_to_point(
+            intrinsics, [float(px), float(py)], d
+        )[2]                                  # we only need Z (meters)
 
-    #position OpenCV windows
-    cv2.namedWindow('Depth Stream',   cv2.WINDOW_AUTOSIZE)
-    cv2.moveWindow('Depth Stream',   50,  50)
-    cv2.namedWindow('PifPaf Overlay', cv2.WINDOW_AUTOSIZE)
-    cv2.moveWindow('PifPaf Overlay', 750,  50)
+    if results.face_landmarks: #face landmarks
+        for i,point in enumerate(results.face_landmarks.landmark):
+            px, py = point.x * w, point.y * h
+            face.loc[i,['x','y','z']]=[point.x,point.y,_real_z(px,py)]
+    if results.pose_landmarks: #pose landmarks
+        for i,point in enumerate(results.pose_landmarks.landmark):
+            px, py = point.x * w, point.y * h
+            pose.loc[i,['x','y','z']]=[point.x,point.y,_real_z(px,py)]
+    if results.left_hand_landmarks: #left hand landmarks
+        for i,point in enumerate(results.left_hand_landmarks.landmark):
+            px, py = point.x * w, point.y * h
+            left_hand.loc[i,['x','y','z']]=[point.x,point.y,_real_z(px,py)]   
+    if results.right_hand_landmarks: ##right hand landmarks
+        for i,point in enumerate(results.right_hand_landmarks.landmark):
+            px, py = point.x * w, point.y * h
+            right_hand.loc[i,['x','y','z']]=[point.x,point.y,_real_z(px,py)]
 
-    start = time.time()
-    depth_frame = None
-    landmark_rows = []
-    frame_idx=0
+    face=face.reset_index().rename(columns={'index':'landmark_index'}).assign(type='face') #resetting the index and renaming the columns
+    pose=pose.reset_index().rename(columns={'index':'landmark_index'}).assign(type='pose')
+    left_hand=left_hand.reset_index().rename(columns={'index':'landmark_index'}).assign(type='left_hand')
+    right_hand=right_hand.reset_index().rename(columns={'index':'landmark_index'}).assign(type='right_hand')
+    landmarks=pd.concat([face,pose,left_hand,right_hand]).reset_index(drop=True) #concatenating the dataframes
+    landmarks=xyz_skel.merge(landmarks,how='left',on=['type','landmark_index']) #left merging the dataframes to get the x,y,z coordinates
+    landmarks=landmarks.assign(frame=frame) ##assigning the frame number to the dataframe
+    return landmarks
 
-    #capture loop, shows two windows: depth stream + PifPaf overlay
-    while True:
-        frames      = pipeline.wait_for_frames()
-        aligned     = align.process(frames)
-        depth_frame = aligned.get_depth_frame()
-        color_frame = aligned.get_color_frame()
-        if not depth_frame or not color_frame:
-            continue
 
-        frame_idx += 1
+def capture(xyz): #opencv capture function to capture the video and landmarks
+    all_landmarks=[]
+    last_depth  = None   #will hold the most recent depth frame for point cloud
+    #cap=cv2.VideoCapture(2)
+    with mp_holistic.Holistic(min_detection_confidence=0.5,min_tracking_confidence=0.5) as holistic: #using holistic model for pose detection
+        frame=0
+        start_time = time.time()
 
-        # build depth heatmap
-        depth_image = np.asanyarray(depth_frame.get_data())
-        depth_color = cv2.applyColorMap(
-            cv2.convertScaleAbs(depth_image, alpha=0.3),
-            cv2.COLORMAP_JET
-        )
+        while True:
+            frame += 1
+            #pull synced frames
+            frames      = pipeline.wait_for_frames()
+            aligned     = align.process(frames)
+            depth_frame = aligned.get_depth_frame()
+            color_frame = aligned.get_color_frame()
+            if not depth_frame or not color_frame:
+                continue
+            last_depth  = depth_frame          #save for point-cloud later
 
-        # get color frame & run PifPaf
-        color_image = np.asanyarray(color_frame.get_data())
-        frame_bgr   = cv2.flip(color_image, 1)
-        frame_rgb   = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        h, w, _     = frame_bgr.shape
+            color_image = np.asanyarray(color_frame.get_data())
+            image       = cv2.flip(color_image, 1)
 
-        try:
-            preds, _, _ = predictor.numpy_image(frame_rgb)
-        except Exception as e:
-            print("PifPaf error:", e)
-            continue
+            image.flags.writeable = False
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)         
+            results = holistic.process(image_rgb) #process the image using holistic model
 
-        # draw face & hand keypoints
-        if preds:
-            kp = preds[0].data  # shape (133,3)
-            for i, (x, y, conf) in enumerate(kp):
-                if conf < 0.05:
-                    continue
-                if i in POSE_KPTS:
-                    color = (0, 0, 255)    # red for body
-                    typ   = 'pose'
-                    idx   = i
-                elif i in FACE_KPTS:
-                    color = (0, 140, 255) # orange for face
-                    typ = 'face'       
-                    idx = i - 23
-                elif i in LEFT_HAND_KPTS:
-                    color = (255, 0, 0)   # blue for left hand
-                    typ = 'left_hand'  
-                    idx = i - 91
-                elif i in RIGHT_HAND_KPTS:
-                    color = (0, 255, 0)  # green for right hand
-                    typ = 'right_hand'
-                    idx = i - 112
-                else:
-                    continue # skip other keypoints
-                cv2.circle(frame_bgr, (int(x), int(y)), 4, color, -1) #draw keypoint on image
+            landmarks=create_frame_landmarks(results,frame,xyz,depth_frame) #using our helper
+            all_landmarks.append(landmarks) ##appending the landmarks to the list
 
-                #deproject pixel (x,y) + depth → real‑world (X,Y,Z) in meters 
-                depth_m = depth_frame.get_distance(int(x), int(y))
-                if depth_m == 0:
-                    continue
-                point3d = rs.rs2_deproject_pixel_to_point(
-                    intrinsics,
-                    [int(x), int(y)],
-                    depth_m
+            image.flags.writeable = True
+            mp_drawing.draw_landmarks( #draw landmarks
+                image, 
+                results.face_landmarks,  
+                mp_holistic.FACEMESH_CONTOURS,
+                landmark_drawing_spec=None, 
+                connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style())
+            mp_drawing.draw_landmarks(
+                image, results.pose_landmarks, mp_holistic.POSE_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_pose_landmarks_style())
+            mp_drawing.draw_landmarks(
+                image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+            mp_drawing.draw_landmarks(
+                image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
+            cv2.imshow('MediaPipe Holistic (RealSense depth-backed Z)', image) #show the image with landmarks
+            if cv2.waitKey(5) & 0xFF == ord('q'):
+                break
+            elif time.time() - start_time > 8:
+                break   
+
+        #---- point-cloud generation just before shutdown ------------------
+        if last_depth:
+            pc      = rs.pointcloud()
+            points  = pc.calculate(last_depth)
+            verts   = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
+            verts   = verts[verts[:, 2] > 0]   #drop invalid
+            #basic crop around camera centre (customise to taste)
+            x_min, x_max = -0.5,  0.5
+            y_min, y_max = -1.2,  0.2
+            z_min, z_max =  0.2,  1.5
+            mask = (
+                (verts[:,0] > x_min)&(verts[:,0] < x_max)&
+                (verts[:,1] > y_min)&(verts[:,1] < y_max)&
+                (verts[:,2] > z_min)&(verts[:,2] < z_max)
+            )
+            filt = verts[mask]
+            if filt.shape[0]:
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(filt)
+                o3d.visualization.draw_geometries(
+                    [pcd],
+                    window_name='Captured PointCloud'
                 )
-                X_m, Y_m, Z_m = point3d  # in meters
+            else:
+                print("No valid points in range for point-cloud.")
+        #--------------------------------------------------------------------
 
-                # store deprojected coordinates
-                landmark_rows.append({
-                    'frame':          frame_idx,
-                    'type':           typ,
-                    'landmark_index': idx,
-                    'x':              X_m,
-                    'y':              Y_m,
-                    'z':              Z_m,
-                })
-
-        # show both windows
-        cv2.imshow('Depth Stream',   depth_color)
-        cv2.imshow('PifPaf Overlay', frame_bgr)
-
-        key = cv2.waitKey(1)
-        if key == ord('q') or (time.time() - start) > 20: #quit on press 'q' key or after 20 seconds
-            break
-
-    #cleanup OpenCV & RealSense
-    pipeline.stop()
-    cv2.destroyAllWindows()
+        pipeline.stop()
+        cv2.destroyAllWindows()
+    return all_landmarks
 
 
-    #after the capture, we show final point cloud in Open3D
-    if depth_frame and landmark_rows:
-        pc     = rs.pointcloud()
-        points = pc.calculate(depth_frame)
-        verts  = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
-        verts  = verts[verts[:, 2] > 0]
+def capture_sign(): #function to store the landmarks in a parquet file
+    BASE_DIR = os.path.join(os.getcwd(), 'data', 'asl-signs') #data directory
+    train = pd.read_csv(f'{BASE_DIR}/train.csv')
+    xyz=pd.read_parquet(f'{BASE_DIR}/train_landmark_files/16069/695046.parquet') #loading a sample landmark file to intialize the dataframe with the right shape
+    all_landmarks=capture(xyz) #calling the capture function to get the landmarks
+    all_landmarks=pd.concat(all_landmarks).reset_index(drop=True) ##concatenating the landmarks to make a single dataframe
+    all_landmarks.to_parquet('3d_andmarks.parquet')
+    return
 
-        # half‑scale cropping around you (±0.5 m horizontally, 0.2–1.5 m depth)
-        x_min, x_max = -0.5,  0.5
-        y_min, y_max =  -1.20,  0.20 
-        z_min, z_max =  0.2,  1.5
-        mask = (
-            (verts[:, 0] > x_min) & (verts[:, 0] < x_max) &
-            (verts[:, 1] > y_min) & (verts[:, 1] < y_max) &
-            (verts[:, 2] > z_min) & (verts[:, 2] < z_max)
-        )
-        filtered = verts[mask]
-
-        if filtered.shape[0] == 0:
-            print("No valid points in range. Exiting.")
-            exit(1)
-
-
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(filtered)
-        o3d.visualization.draw_geometries(
-            [pcd],
-            window_name='Captured PointCloud'
-        )
-    else:
-        print("No depth frame captured. Exiting.")
-        exit(1)
-
-
-    if landmark_rows:
-        df = pd.DataFrame(landmark_rows)
-        df.to_parquet("3d_landmarks.parquet", index=False)
-        print(f"✅ Saved {len(df)} landmarks → 3d_landmarks.parquet")
-
-if __name__ == "__main__":
-    pc_capture_sign()
+if __name__ == "__main__": #main function to test these scripts in isolation
+    capture_sign()
+    print('Landmarks saved') #saved! 

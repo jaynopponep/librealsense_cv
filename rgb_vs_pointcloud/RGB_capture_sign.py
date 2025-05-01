@@ -6,15 +6,9 @@ mp_holistic = mp.solutions.holistic
 import pandas as pd
 import time
 import os
+import pyrealsense2 as rs
+import numpy as np
 
-'''
-IMPORTANT NOTICE:
-this code does NOT run on the same python version as the pointcloud capture. intel realsense requires that the python version be
-3.7 or lower, but mediapipe only works on 3.9+. the rgb capture/classification uses python 3.12 to take advantage of mediapipe holistic to get z coordinates.
-the pointcloud capture/classification uses python 3.7 to take advantage of the intel realsense camera and open3d for point cloud processing.
-the goal of the project is to see the comparison of pointcloud data vs mediapipe's z coordinates for sign language classification.
-
-'''
 def create_frame_landmarks(results,frame, xyz): # function to create a dataframe of landmarks for each frame
 
     xyz_skel=xyz[['type','landmark_index']].drop_duplicates().reset_index(drop=True).copy()
@@ -48,28 +42,40 @@ def create_frame_landmarks(results,frame, xyz): # function to create a dataframe
 
 def capture(xyz): #opencv capture function to capture the video and landmarks
     all_landmarks=[]
+    #realsense setup
+    pipeline = rs.pipeline()
+    config   = rs.config()
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30) 
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    profile  = pipeline.start(config) #start streaming depth + color
+    align    = rs.align(rs.stream.color) #align depth to color stream
 
-    cap=cv2.VideoCapture(0)
+    #cv2 fallback (uncomment if you want to revert)
+    #cap=cv2.VideoCapture(2)
+
     with mp_holistic.Holistic(min_detection_confidence=0.5,min_tracking_confidence=0.5) as holistic: #using holistic model for pose detection
         frame=0
         start_time = time.time()
-        while cap.isOpened():
+        while True:  # using RealSense, so we control the loop manually
             frame+=1
-            success, image = cap.read()
-            if not success:
-                print("Ignoring empty camera frame.")
+            frames      = pipeline.wait_for_frames()
+            aligned     = align.process(frames)
+            color_frame = aligned.get_color_frame()
+            if not color_frame:
                 continue
+
+            #depth_frame = aligned.get_depth_f
+            image = np.asanyarray(color_frame.get_data())
+            image = cv2.flip(image, 1)
+
             image.flags.writeable = False
-            image = cv2.cvtColor(cv2.flip(image, 1), cv2.COLOR_BGR2RGB)         
-            results = holistic.process(image) #process the image using holistic model
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)         
+            results = holistic.process(image_rgb) #process the image using holistic model
 
             landmarks=create_frame_landmarks(results,frame,xyz) #using our previously defined helper to create the landmarks dataframe
-            all_landmarks.append(landmarks) ##appending the landmarks to the list
-
+            all_landmarks.append(landmarks) #appending the landmarks to the list
 
             image.flags.writeable = True
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
             mp_drawing.draw_landmarks( #now we draw the landmarks on the image using mediapipe drawing utils
                 image, 
                 results.face_landmarks,  
@@ -83,13 +89,14 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
                 image, results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
             mp_drawing.draw_landmarks(
                 image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
-            cv2.imshow('MediaPipe Holistic', image) #show the image with landmarks
+            cv2.imshow('MediaPipe Holistic (RealSense RGB)', image) #show the image with landmarks
             if cv2.waitKey(5) & 0xFF == ord('q'):
                 break
             elif time.time() - start_time > 8:
                 break   
-        cap.release()
+
         cv2.destroyAllWindows()
+        pipeline.stop() 
     return all_landmarks
 def capture_sign(): #function to store the landmarks in a parquet file
     BASE_DIR = os.path.join(os.getcwd(), 'data', 'asl-signs') #data directory
