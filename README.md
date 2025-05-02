@@ -1,11 +1,11 @@
 ## Installation Instruction
-- [ ] Install python 3.7.2  **MUST BE 64 BIT VERSION NOT 32**
+- [ ] Install python 3.12  **MUST BE 64 BIT VERSION NOT 32**
 ```
-https://www.python.org/downloads/release/python-372/
+https://www.python.org/downloads/release/python-31210/
 ```
-- [ ] Create a 3.7.2 venv
+- [ ] Create a 3.12 venv
 ```bash
-py -3.7 -m venv .venv
+py -3.12 -m venv .venv
 .venv/Scripts/activate
 ```
 or on Linux and mac:
