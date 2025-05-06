@@ -2,14 +2,7 @@ import pandas as pd #dependncies
 import numpy as np
 import tensorflow as tf 
 import os 
-'''
-IMPORTANT NOTICE:
-this code does NOT run on the same python version as the pointcloud capture. intel realsense requires that the python version be
-3.7 or lower, but mediapipe only works on 3.9+. the rgb capture/classification uses python 3.12 to take advantage of mediapipe holistic to get z coordinates.
-the pointcloud capture/classification uses python 3.7 to take advantage of the intel realsense camera and open3d for point cloud processing.
-the goal of the project is to see the comparison of pointcloud data vs mediapipe's z coordinates for sign language classification.
 
-'''
 def classifier():
     BASE_DIR = os.path.join(os.getcwd(), 'data', 'asl-signs') #data directory
     train = pd.read_csv(f'{BASE_DIR}/train.csv')

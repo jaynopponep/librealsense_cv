@@ -45,8 +45,8 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
     #realsense setup
     pipeline = rs.pipeline()
     config   = rs.config()
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30) 
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     profile  = pipeline.start(config) #start streaming depth + color
     align    = rs.align(rs.stream.color) #align depth to color stream
 
@@ -65,8 +65,9 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
                 continue
 
             #depth_frame = aligned.get_depth_f
-            image = np.asanyarray(color_frame.get_data())
-            image = cv2.flip(image, 1)
+            color_image = np.asanyarray(color_frame.get_data())
+            image_small = cv2.flip(color_image, 1) 
+            image = cv2.resize(image_small, (1920, 1080), interpolation=cv2.INTER_LINEAR)  #rescale to 1080p, and use linear interpolation to avoid artifacts
 
             image.flags.writeable = False
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)         
@@ -90,6 +91,7 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
             mp_drawing.draw_landmarks(
                 image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
             cv2.imshow('MediaPipe Holistic (RealSense RGB)', image) #show the image with landmarks
+
             if cv2.waitKey(5) & 0xFF == ord('q'):
                 break
             elif time.time() - start_time > 8:

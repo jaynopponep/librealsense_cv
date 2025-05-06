@@ -1,6 +1,6 @@
 import streamlit as st
 from PC_capture_sign import pc_capture_sign   #importing the pointcloud capture and classifier functions
-from PC_classifier import pc_classifier       
+from PC_classifier import classifier       
 
 #it is extremely important to specify a different port for the pointcloud streamlit app, as it will conflict with the RGB streamlit app otherwise.
 #please run the following command in the terminal to run the streamlit app:
@@ -22,7 +22,7 @@ st.write("---")
 if st.button("Classify ASL Sign (PointCloud)"):
     st.info("Running classifier…")
     try:
-        sign = pc_classifier()
+        sign = classifier()
         st.success(f"Predicted sign: **{sign}**")
     except Exception as e:
         st.error(f"Classification failed: {e}")
