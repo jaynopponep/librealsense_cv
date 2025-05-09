@@ -44,7 +44,7 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
     all_landmarks=[]
     #realsense setup
     pipeline = rs.pipeline()
-    config   = rs.config()
+    config = rs.config()
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     profile  = pipeline.start(config) #start streaming depth + color
@@ -66,11 +66,9 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
 
             #depth_frame = aligned.get_depth_f
             color_image = np.asanyarray(color_frame.get_data())
-            image_small = cv2.flip(color_image, 1) 
-            image = cv2.resize(image_small, (1920, 1080), interpolation=cv2.INTER_LINEAR)  #rescale to 1080p, and use linear interpolation to avoid artifacts
-
+            image = cv2.flip(color_image, 1)
             image.flags.writeable = False
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)         
+            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  
             results = holistic.process(image_rgb) #process the image using holistic model
 
             landmarks=create_frame_landmarks(results,frame,xyz) #using our previously defined helper to create the landmarks dataframe
