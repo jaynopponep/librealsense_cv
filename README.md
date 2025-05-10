@@ -23,6 +23,8 @@ pip install -r requirements.txt
 cd rgb_vs_pointcloud
 ```
 
+
+
 ## Running the RGB Model
 - [ ] First run the RGB_capture_sign.py file
 ```bash
@@ -33,10 +35,9 @@ You should see a map open. This is the pointcloud captured from the lidar camera
 ```bash
 py PC_classifier.py
 ```
-- [ ] To run and see both models at the same time, run the following:
-```bash
-py RGB_streamlit.py
-```
+
+
+
 ## Running the Lidar/Pointcloud Model
 - [ ] First run the PC_capture_sign.py file
 ```bash
@@ -49,9 +50,13 @@ py PC_classifier.py
 ```
 This will run the Kaggle model against the captured pointclouds, recently turned into collection of np arrays. 
 
-- [ ] Run the PointCloud Streamlit. Do note you must specify a different port for this streamlit to be running at the same time as the RGB streamlit
+
+
+
+## Run Both RGB and Lidar
+- [ ] Run the  Streamlit. This allows you to run and see both models at the same time
 ```bash
-streamlit run PC_streamlit.py --server.port 8502
+streamlit run streamlit_asl.py
 ```
 
 

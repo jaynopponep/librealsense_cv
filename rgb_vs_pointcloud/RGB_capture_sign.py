@@ -49,7 +49,7 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
     config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     profile  = pipeline.start(config) #start streaming depth + color
     align    = rs.align(rs.stream.color) #align depth to color stream
-
+    
     #cv2 fallback (uncomment if you want to revert)
     #cap=cv2.VideoCapture(2)
 
@@ -58,8 +58,8 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
         start_time = time.time()
         while True:  # using RealSense, so we control the loop manually
             frame+=1
-            frames      = pipeline.wait_for_frames()
-            aligned     = align.process(frames)
+            frames = pipeline.wait_for_frames()
+            aligned = align.process(frames)
             color_frame = aligned.get_color_frame()
             if not color_frame:
                 continue
