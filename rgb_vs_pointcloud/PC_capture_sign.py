@@ -11,19 +11,8 @@ def pc_capture_sign():
     import numpy as np
     import open3d as o3d
 
-    #stream init
-    pipeline = rs.pipeline()
-    config = rs.config()
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    profile = pipeline.start(config) #start streaming depth + color
-    align   = rs.align(rs.stream.color) #align depth to color stream
 
-    # get intrinsics
-    color_stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
-    intrinsics   = color_stream.get_intrinsics()
-
-    def create_frame_landmarks(results,frame, xyz, depth_frame): # function to create a dataframe of landmarks for each frame
+    def create_frame_landmarks(results,frame, xyz, depth_frame, intrinsics): # function to create a dataframe of landmarks for each frame
         
         xyz_skel=xyz[['type','landmark_index']].drop_duplicates().reset_index(drop=True).copy()
         
@@ -32,13 +21,13 @@ def pc_capture_sign():
         left_hand=pd.DataFrame()
         right_hand=pd.DataFrame()
 
-        w, h = intrinsics.width, intrinsics.height  # keep width/height handy
+        #w, h = intrinsics.width, intrinsics.height  # keep width/height handy
         w_depth, h_depth = 640, 480 # original depth frame size
-        w_big, h_big  = 1920, 1080 #intended image size
+        w_big, h_big  = 1920, 1080 #resized image size
 
         #helper with bounds-check so we never call RealSense on invalid pixels
         def _real_z(px_big, py_big):
-            px = px_big * w_depth / w_big
+            px = (w_big - px_big) * w_depth / w_big
             py = py_big * h_depth / h_big
             if px < 0 or px >= w_depth or py < 0 or py >= h_depth:
                 return np.nan
@@ -73,6 +62,7 @@ def pc_capture_sign():
         left_hand=left_hand.reset_index().rename(columns={'index':'landmark_index'}).assign(type='left_hand')
         right_hand=right_hand.reset_index().rename(columns={'index':'landmark_index'}).assign(type='right_hand')
         landmarks=pd.concat([face,pose,left_hand,right_hand]).reset_index(drop=True) #concatenating the dataframes
+
         landmarks=xyz_skel.merge(landmarks,how='left',on=['type','landmark_index']) #left merging the dataframes to get the x,y,z coordinates
         landmarks=landmarks.assign(frame=frame) ##assigning the frame number to the dataframe
         return landmarks
@@ -80,8 +70,22 @@ def pc_capture_sign():
 
     def capture(xyz): #opencv capture function to capture the video and landmarks
         all_landmarks=[]
-        last_depth  = None   #will hold the most recent depth frame for point cloud
+        #last_depth  = None   #will hold the most recent depth frame for point cloud
         #cap=cv2.VideoCapture(2)
+
+        #stream init
+        pipeline = rs.pipeline()
+        config = rs.config()
+        config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+        profile = pipeline.start(config) #start streaming depth + color
+        align   = rs.align(rs.stream.color) #align depth to color stream
+
+        # get intrinsics
+        color_stream = profile.get_stream(rs.stream.color).as_video_stream_profile()
+        intrinsics   = color_stream.get_intrinsics()
+        last_depth  = None #will hold the most recent depth frame for point cloud
+
         with mp_holistic.Holistic(min_detection_confidence=0.5,min_tracking_confidence=0.5) as holistic: #using holistic model for pose detection
             frame=0
             start_time = time.time()
@@ -98,18 +102,19 @@ def pc_capture_sign():
                 last_depth  = depth_frame#save for point-cloud later
 
                 color_image = np.asanyarray(color_frame.get_data())
-                image_small = cv2.flip(color_image, 1) 
-                image = cv2.resize(image_small, (1920, 1080), interpolation=cv2.INTER_LINEAR)  #rescale to 1080p, and use linear interpolation to avoid artifacts
+                image_flipped = cv2.flip(color_image, 1) 
+                image = cv2.resize(image_flipped, (1920, 1080), interpolation=cv2.INTER_LINEAR)  #rescale to 1080p, and use linear interpolation to avoid artifacts
 
 
                 image.flags.writeable = False
                 image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)         
                 results = holistic.process(image_rgb) #process the image using holistic model
 
-                landmarks=create_frame_landmarks(results,frame,xyz,depth_frame) #using our helper
+                landmarks=create_frame_landmarks(results,frame,xyz,depth_frame,intrinsics) #using our helper
                 all_landmarks.append(landmarks) ##appending the landmarks to the list
 
-                image.flags.writeable = True
+                image.flags.writeable = True #image is now writeable
+
                 mp_drawing.draw_landmarks( #draw landmarks
                     image, 
                     results.face_landmarks,  

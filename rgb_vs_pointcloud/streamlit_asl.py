@@ -2,10 +2,7 @@ import streamlit as st
 import os
 import sys
 
-
-'''
-basically just logic to run  rgb capture and classifier, as well as pointcloud capture and classifier all in one page.
-'''
+#basically just logic to run  rgb capture and classifier, as well as pointcloud capture and classifier all in one page.
 
 #current working directory stuff
 project_dir = os.getcwd()

@@ -46,12 +46,12 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
     pipeline = rs.pipeline()
     config = rs.config()
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    profile  = pipeline.start(config) #start streaming depth + color
-    align    = rs.align(rs.stream.color) #align depth to color stream
-    
+    #config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+
+    #align    = rs.align(rs.stream.color) #align depth to color stream
+    profile=pipeline.start(config) #start streaming depth + color
     #cv2 fallback (uncomment if you want to revert)
-    #cap=cv2.VideoCapture(2)
+    #cap=cv2.VideoCapture(2) 
 
     with mp_holistic.Holistic(min_detection_confidence=0.5,min_tracking_confidence=0.5) as holistic: #using holistic model for pose detection
         frame=0
@@ -59,8 +59,7 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
         while True:  # using RealSense, so we control the loop manually
             frame+=1
             frames = pipeline.wait_for_frames()
-            aligned = align.process(frames)
-            color_frame = aligned.get_color_frame()
+            color_frame = frames.get_color_frame()
             if not color_frame:
                 continue
 
@@ -90,20 +89,20 @@ def capture(xyz): #opencv capture function to capture the video and landmarks
                 image, results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS, landmark_drawing_spec=mp_drawing_styles.get_default_hand_landmarks_style())
             cv2.imshow('MediaPipe Holistic (RealSense RGB)', image) #show the image with landmarks
 
-            if cv2.waitKey(5) & 0xFF == ord('q'):
+            if cv2.waitKey(5) & 0xFF == ord('q'): 
                 break
             elif time.time() - start_time > 8:
                 break   
 
-        cv2.destroyAllWindows()
-        pipeline.stop() 
+    cv2.destroyAllWindows()
+    pipeline.stop() 
     return all_landmarks
 def capture_sign(): #function to store the landmarks in a parquet file
     BASE_DIR = os.path.join(os.getcwd(), 'data', 'asl-signs') #data directory
     train = pd.read_csv(f'{BASE_DIR}/train.csv')
     xyz=pd.read_parquet(f'{BASE_DIR}/train_landmark_files/16069/695046.parquet') #loading a sample landmark file to intialize the dataframe with the right shape
     all_landmarks=capture(xyz) #calling the capture function to get the landmarks
-    all_landmarks=pd.concat(all_landmarks).reset_index(drop=True) ##concatenating the landmarks to make a single dataframe
+    all_landmarks=pd.concat(all_landmarks,ignore_index=True).reset_index(drop=True) #concatenating the landmarks to make a single dataframe
     all_landmarks.to_parquet('2d_landmarks.parquet')
     return
 
